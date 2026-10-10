@@ -1,0 +1,32 @@
+notion:
+  phd_page_url: ''
+  calendar_data_source_id: 3dfd6ec2-486f-805f-9443-000b9688cf1e
+  todo_data_source_id: 3e1d6ec2-486f-805d-8ebb-000ba14e34af
+calendar:
+  title_property: Name
+  date_property: StartDate
+  location_property: Location
+  description_property: Description
+  link_property: Link
+  tags_property: Tags
+  workday_tag: Workday
+  end_property: EndDate
+  hours_property: WorkHours
+todo:
+  title_property: Name
+  due_property: Due
+  status_property: Status
+  priority_property: Priority
+  completed_statuses:
+  - Done
+app:
+  refresh_minutes: 5
+  max_todos: 12
+  max_meetings: 10
+  open_notion_on_start: true
+  start_minimized: false
+  window_width: 520
+  window_height: 520
+hotkeys:
+  new_todo: Ctrl+Alt+N
+  toggle_dashboard: Ctrl+Alt+D
