@@ -20,10 +20,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from add_dialog import ICON_FONT
-from hotkeys import HOTKEY_ACTIONS, hotkeys_from_config, parse_hotkey
-from title_bar import FramelessDialog
-from voice_notes import VOICE_DEFAULTS, voice_config, voice_installed
+from notion_dashboard.hotkeys import HOTKEY_ACTIONS, hotkeys_from_config, parse_hotkey
+from notion_dashboard.paths import ASSETS
+from notion_dashboard.ui.icons import ICON_DASHBOARD, ICON_FONT, ICON_KEYBOARD, ICON_MICROPHONE, ICON_SETTINGS
+from notion_dashboard.ui.title_bar import FramelessDialog
+from notion_dashboard.voice.notes import VOICE_DEFAULTS, voice_config, voice_installed
+
+CHECK_IMAGE = (ASSETS / "check.svg").as_posix()
 
 VOICE_LANGUAGES = (("auto", "Auto-detect"), ("en", "English"), ("de", "German"))
 VOICE_MODELS = (
@@ -32,13 +35,6 @@ VOICE_MODELS = (
     ("small", "small (more accurate, needs a GPU for live text)"),
 )
 VOICE_DEVICES = (("auto", "Auto (GPU if available)"), ("cpu", "CPU only"))
-
-# Segoe MDL2 Assets glyphs for the section headers
-ICON_SETTINGS = "\ue713"
-ICON_DASHBOARD = "\ue80f"
-ICON_MICROPHONE = "\ue720"
-ICON_KEYBOARD = "\ue765"
-
 
 def dialog_stylesheet(colors: dict) -> str:
     """The settings look: dark cards, rounded inputs, blue primary button.
@@ -102,6 +98,27 @@ def dialog_stylesheet(colors: dict) -> str:
         font-family: "Segoe UI";
         font-size: 9pt;
         spacing: 8px;
+    }}
+
+    /* Drawn here rather than by the platform style: Linux's Fusion style
+       draws a dark box that disappears on the dark background. */
+    QCheckBox::indicator {{
+        width: 14px;
+        height: 14px;
+        border: 1px solid {colors["border"]};
+        border-radius: 4px;
+        background: {colors["bg"]};
+    }}
+
+    QCheckBox::indicator:checked {{
+        border: 1px solid {colors["accent"]};
+        background: {colors["accent"]};
+        image: url("{CHECK_IMAGE}");
+    }}
+
+    QCheckBox::indicator:disabled {{
+        border: 1px solid {colors["border"]};
+        background: {colors["panel"]};
     }}
 
     QPushButton {{
@@ -206,14 +223,13 @@ class SettingsDialog(FramelessDialog):
     """Edits the `app` (and `notion.phd_page_url`) section of config.yaml.
 
     Notion IDs / database property names are left out on purpose - those
-    come from the setup window (main.py --setup), and getting one wrong would break the dashboard.
+    come from the setup window (notion-dashboard --setup), and getting one wrong would break the dashboard.
     """
 
-    def __init__(self, config: dict, colors: dict, parent: QWidget | None = None):
+    def __init__(self, config: dict, colors: dict, parent: QWidget | None = None, hotkey_note: str = ""):
         super().__init__("Settings", colors, parent)
 
         self.setModal(True)
-        self.setFixedWidth(400)
 
         self._config = config
         self.result_config: dict | None = None
@@ -327,7 +343,7 @@ class SettingsDialog(FramelessDialog):
         if not voice_installed():
             for widget in (self.voice_enabled_check, *self.voice_combos.values(), self.cleanup_check, self.cleanup_model_edit):
                 widget.setEnabled(False)
-            form.addRow(self._hint("Voice packages aren't installed. Run:  pip install -r requirements-voice.txt"))
+            form.addRow(self._hint("Voice packages aren't installed. Run:  pip install -e '.[voice]'"))
 
         # ---- Hotkeys ------------------------------------------------------
 
@@ -342,6 +358,8 @@ class SettingsDialog(FramelessDialog):
             self.hotkey_edits[name] = edit
 
         form.addRow(self._hint("Click a field and press the new combination. Clear it to turn the hotkey off."))
+        if hotkey_note:
+            form.addRow(self._hint(hotkey_note))
 
         self._cards.addStretch(1)
         self._align_labels()
@@ -355,6 +373,8 @@ class SettingsDialog(FramelessDialog):
         max_height = max(300, screen.availableGeometry().height() - 200)
         scroll.setFixedHeight(min(cards.sizeHint().height() + 8, max_height, 460))
         root.addWidget(scroll)
+        # 400 px fits Segoe UI; wider fonts (e.g. DejaVu Sans on Linux) need more.
+        self.setFixedWidth(max(400, cards.sizeHint().width() + 12))
 
         bottom = QVBoxLayout()
         bottom.setContentsMargins(20, 0, 20, 0)

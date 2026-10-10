@@ -21,25 +21,22 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from add_dialog import (
+from notion_dashboard.notion.api import Meeting, Todo, Workday
+from notion_dashboard.ui.app_icon import app_icon
+from notion_dashboard.ui.dialogs import AddMeetingDialog, AddTodoDialog, EditTodoDialog, make_pill
+from notion_dashboard.ui.icons import (
+    ICON_ADD,
     ICON_CALENDAR,
+    ICON_EDIT,
     ICON_FONT,
     ICON_LOCATION,
     ICON_PREV as ICON_BACK,
+    ICON_TODO,
     ICON_WORK,
-    AddMeetingDialog,
-    AddTodoDialog,
-    EditTodoDialog,
-    make_pill,
+    load_icon_font,
 )
-from app_icon import app_icon
-from notion_api import Meeting, Todo, Workday
-from title_bar import FramelessWindow
+from notion_dashboard.ui.title_bar import FramelessWindow
 
-
-ICON_TODO = ""
-ICON_ADD = ""
-ICON_EDIT = ""
 
 
 # ==============================================================
@@ -1337,6 +1334,7 @@ def format_day(value: datetime | date) -> str:
 if __name__ == "__main__":
 
     qt_app = QApplication(sys.argv)
+    load_icon_font()
 
     def example_refresh():
         return [], [], [], None

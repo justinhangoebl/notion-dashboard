@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=PhD Notion Dashboard
+Comment=Notion calendar, TODOs and working hours
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Office;ProjectManagement;
+StartupWMClass=notion-dashboard
+X-GNOME-Autostart-enabled=true
+Actions=new-todo;toggle-clock;
+
+[Desktop Action new-todo]
+Name=New TODO
+Exec=@EXEC@ --action new_todo
+
+[Desktop Action toggle-clock]
+Name=Clock in / out
+Exec=@EXEC@ --action toggle_clock

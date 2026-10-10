@@ -1,8 +1,8 @@
 """Check the microphone and speech models: records a few seconds and
 transcribes them with each model that can run on this machine.
 
-    .venv\\Scripts\\python.exe voice_check.py            # 8 seconds
-    .venv\\Scripts\\python.exe voice_check.py 12         # 12 seconds
+    python -m notion_dashboard.voice.check        # 8 seconds
+    python -m notion_dashboard.voice.check 12     # 12 seconds
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ def main():
         import sounddevice as sd
         from faster_whisper import WhisperModel
     except ImportError as exc:
-        raise SystemExit(f"Voice dependencies missing ({exc.name}). Run:\n  .venv\\Scripts\\python.exe -m pip install -r requirements-voice.txt")
+        raise SystemExit(f"Voice dependencies missing ({exc.name}). Run:\n  pip install -e '.[voice]'")
 
     device = sd.query_devices(kind="input")
     print(f"Microphone: {device['name']}")

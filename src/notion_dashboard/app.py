@@ -1,31 +1,36 @@
+"""Entry point: loads the config (running first-start setup if needed),
+connects to Notion, and starts the dashboard, tray icon, hotkeys and voice
+notes. Run with `notion-dashboard` or `python -m notion_dashboard`."""
+
 from __future__ import annotations
 
 import argparse
 from datetime import datetime
+import getpass
 import os
-from pathlib import Path
 import sys
 from types import SimpleNamespace
 import webbrowser
 
 import yaml
 from dotenv import load_dotenv, set_key
+from PyQt6.QtCore import QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
-from app_icon import app_icon
-from hotkeys import GlobalHotkeys, hotkeys_from_config
-from notion_api import NotionRepository, Workday
-from overlay import Dashboard
-from settings_dialog import SettingsDialog
-from setup_wizard import SetupWizard
-from tray import TrayIcon
-from voice_notes import VoiceNotes, voice_config
+from notion_dashboard.hotkeys import HOTKEY_ACTIONS, GlobalHotkeys, create_hotkeys, hotkeys_from_config
+from notion_dashboard.notion.api import NotionRepository, Workday
+from notion_dashboard.paths import CONFIG_DIR, CONFIG_PATH, ENV_PATH
+from notion_dashboard.ui.app_icon import app_icon
+from notion_dashboard.ui.dashboard import Dashboard
+from notion_dashboard.ui.icons import load_icon_font
+from notion_dashboard.ui.settings_dialog import SettingsDialog
+from notion_dashboard.ui.setup_wizard import SetupWizard
+from notion_dashboard.ui.tray import TrayIcon
+from notion_dashboard.voice.notes import VoiceNotes, voice_config
 
-
-ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "config.yaml"
-ENV_PATH = ROOT / ".env"
+# Things `--action` can ask the running dashboard to do.
+ACTIONS = ("show", *HOTKEY_ACTIONS)
 
 
 def load_config() -> dict:
@@ -36,6 +41,7 @@ def load_config() -> dict:
 
 
 def save_config(config: dict):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with CONFIG_PATH.open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False)
 
@@ -51,13 +57,14 @@ def load_token() -> str:
     if not token:
         raise RuntimeError(
             "NOTION_TOKEN is missing. "
-            "Run main.py --setup or create a .env file."
+            "Run notion-dashboard --setup."
         )
 
     return token
 
 
 def save_token(token: str):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     set_key(str(ENV_PATH), "NOTION_TOKEN", token)
     os.environ["NOTION_TOKEN"] = token
 
@@ -268,11 +275,13 @@ def make_notion_actions(config: dict):
     )
 
 
-INSTANCE_SERVER = "PhDProductivity.NotionDashboard"
+# Per user: on Linux this is a socket in /tmp, shared by everyone.
+INSTANCE_SERVER = f"PhDProductivity.NotionDashboard.{getpass.getuser()}"
 
 
-def show_running_instance() -> bool:
-    """If the dashboard is already running, ask it to show itself.
+def send_to_running_instance(action: str) -> bool:
+    """If the dashboard is already running, ask it to do `action` ("show"
+    when simply launched again) and return True.
 
     A second copy couldn't register the hotkeys (the first one owns them),
     so it would look like the hotkeys silently stopped working.
@@ -282,18 +291,47 @@ def show_running_instance() -> bool:
     socket.connectToServer(INSTANCE_SERVER)
     if not socket.waitForConnected(300):
         return False
-    socket.write(b"show")
+    socket.write(action.encode())
     socket.waitForBytesWritten(300)
     socket.disconnectFromServer()
     return True
 
 
-def listen_for_second_launch(window: Dashboard) -> QLocalServer:
+def listen_for_actions(run_action) -> QLocalServer:
+    """Second launches and `--action` calls arrive here."""
+
     server = QLocalServer()
     QLocalServer.removeServer(INSTANCE_SERVER)  # stale name after a crash
     server.listen(INSTANCE_SERVER)
-    server.newConnection.connect(window.show_dashboard)
+
+    def on_connection():
+        socket = server.nextPendingConnection()
+        action = "show"
+        if socket.bytesAvailable() or socket.waitForReadyRead(300):
+            action = bytes(socket.readAll()).decode(errors="replace").strip()
+        socket.disconnectFromServer()
+        socket.deleteLater()
+
+        # Not from inside this slot: an action may open a modal dialog.
+        QTimer.singleShot(0, lambda: run_action(action if action in ACTIONS else "show"))
+
+    server.newConnection.connect(on_connection)
     return server
+
+
+def prefer_x11_on_wayland():
+    """On a Wayland session, run through XWayland when it's there: Wayland
+    doesn't let apps keep a window on top or place the voice overlay, and
+    X11 hotkeys work at least while an X11 window has focus. Falls back to
+    Wayland if the xcb plugin can't load. QT_QPA_PLATFORM overrides it."""
+
+    if (
+        sys.platform.startswith("linux")
+        and "QT_QPA_PLATFORM" not in os.environ
+        and os.environ.get("XDG_SESSION_TYPE") == "wayland"
+        and os.environ.get("DISPLAY")
+    ):
+        os.environ["QT_QPA_PLATFORM"] = "xcb;wayland"
 
 
 def apply_hotkeys(hotkeys: GlobalHotkeys, config: dict, window: Dashboard):
@@ -311,7 +349,9 @@ def make_open_settings(config: dict, hotkeys: GlobalHotkeys, on_saved: list):
         # while Settings is open.
         hotkeys.unregister_all()
         try:
-            dialog = SettingsDialog(config, colors, parent=window)
+            dialog = SettingsDialog(
+                config, colors, parent=window, hotkey_note=hotkeys.unavailable_reason or hotkeys.hint
+            )
             if dialog.exec() and dialog.result_config is not None:
                 config.clear()
                 config.update(dialog.result_config)
@@ -340,6 +380,13 @@ def main():
         help="Show the Notion setup window (token, workspace) again.",
     )
 
+    parser.add_argument(
+        "--action",
+        choices=ACTIONS,
+        help="Tell the running dashboard to do this (starting it if needed). "
+        "Bind these to desktop shortcuts where global hotkeys aren't available, e.g. on Wayland.",
+    )
+
     args = parser.parse_args()
 
     # --------------------------------------------------------------
@@ -355,12 +402,16 @@ def main():
             "PhDProductivity.NotionDashboard"
         )
 
+    prefer_x11_on_wayland()
+
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("Notion Dashboard")
+    qt_app.setDesktopFileName("notion-dashboard")  # matches the Linux .desktop entry
     qt_app.setWindowIcon(app_icon())
+    load_icon_font()
 
-    # Launched again while running: bring the running dashboard forward.
-    if show_running_instance():
+    # Launched again while running: hand the request to the running dashboard.
+    if send_to_running_instance(args.action or "show"):
         return
 
     # --------------------------------------------------------------
@@ -394,7 +445,7 @@ def main():
 
     notion = make_notion_actions(config)
 
-    hotkeys = GlobalHotkeys(qt_app)
+    hotkeys = create_hotkeys(qt_app)
     settings_listeners: list = []
 
     window = Dashboard(
@@ -419,7 +470,6 @@ def main():
     )
 
     window.apply_app_settings(config["app"])
-    instance_server = listen_for_second_launch(window)  # kept alive for the app's lifetime
 
     # Keep the tray icon referenced for the app's lifetime.
     tray = None
@@ -442,18 +492,23 @@ def main():
     settings_listeners.append(lambda cfg: voice.apply_settings(voice_config(cfg)))
 
     actions = {
+        "show": window.show_dashboard,
         "new_todo": voice.toggle,
         "toggle_dashboard": window.toggle_dashboard,
         "toggle_clock": window.toggle_clock,
         VoiceNotes.ESC_NAME: voice.cancel,
     }
     hotkeys.triggered.connect(lambda name: actions[name]())
+    instance_server = listen_for_actions(lambda name: actions[name]())  # kept alive for the app's lifetime
     apply_hotkeys(hotkeys, config, window)
     qt_app.aboutToQuit.connect(voice.shutdown)
     qt_app.aboutToQuit.connect(hotkeys.unregister_all)
 
     if tray is None or not config["app"].get("start_minimized", False):
         window.show()
+
+    if args.action and args.action != "show":
+        actions[args.action]()
 
     sys.exit(qt_app.exec())
 

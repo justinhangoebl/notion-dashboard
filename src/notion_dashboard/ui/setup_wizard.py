@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from notion_setup import (
+from notion_dashboard.notion.setup import (
     NotionItem,
     Workspace,
     config_for_existing,
@@ -33,13 +33,13 @@ from notion_setup import (
     load_workspace,
     merge_config,
 )
-from settings_dialog import ICON_DASHBOARD, dialog_stylesheet
-from title_bar import FramelessDialog
+from notion_dashboard.paths import ENV_PATH
+from notion_dashboard.ui.icons import ICON_ADD, ICON_DASHBOARD, ICON_LINK
+from notion_dashboard.ui.settings_dialog import dialog_stylesheet
+from notion_dashboard.ui.title_bar import FramelessDialog
 
 INTEGRATIONS_URL = "https://www.notion.so/profile/integrations"
 
-ICON_ADD = ""
-ICON_LINK = ""
 
 
 class SetupWizard(FramelessDialog):
@@ -177,7 +177,7 @@ class SetupWizard(FramelessDialog):
         )
         layout.addWidget(show)
 
-        layout.addWidget(self._hint("The token is stored only on this PC, in the .env file next to the app."))
+        layout.addWidget(self._hint(f"The token is stored only on this PC, in {ENV_PATH}."))
         return page
 
     def _build_choose_page(self) -> QWidget:

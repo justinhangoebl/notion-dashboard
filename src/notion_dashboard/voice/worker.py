@@ -76,7 +76,7 @@ class Transcriber:
             import ctranslate2
             from faster_whisper import WhisperModel
         except ImportError as exc:
-            self._fail(f"Voice dependencies missing ({exc.name}). Install requirements-voice.txt.")
+            self._fail(f"Voice dependencies missing ({exc.name}). Install them with: pip install -e '.[voice]'")
             return
 
         candidates = []

@@ -25,7 +25,18 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from title_bar import FramelessDialog
+from notion_dashboard.ui.icons import (
+    ICON_CALENDAR,
+    ICON_CLOCK,
+    ICON_FLAG,
+    ICON_FONT,
+    ICON_LINK,
+    ICON_LOCATION,
+    ICON_NEXT,
+    ICON_PREV,
+    ICON_WORK,
+)
+from notion_dashboard.ui.title_bar import FramelessDialog
 
 
 # Notion's dark-mode select-tag colors.
@@ -35,15 +46,6 @@ TAG_COLORS = {
     "low": "#28456c",
 }
 
-ICON_FONT = "Segoe MDL2 Assets"
-ICON_CALENDAR = ""
-ICON_CLOCK = ""
-ICON_LOCATION = ""
-ICON_LINK = ""
-ICON_FLAG = ""
-ICON_WORK = ""
-ICON_PREV = ""
-ICON_NEXT = ""
 
 
 def make_pill(text: str, colors: dict) -> QLabel:

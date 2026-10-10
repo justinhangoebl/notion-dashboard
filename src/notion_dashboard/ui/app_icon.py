@@ -3,19 +3,20 @@
 Drawn in code so it is sharp at every size. Deliberately unlike Notion's
 black-and-white "N" so the two are easy to tell apart in the taskbar.
 
-Run `python app_icon.py` to (re)write assets/icon.ico and assets/icon.png,
-used by the Windows Startup shortcut.
+Run `python -m notion_dashboard.ui.app_icon` to (re)write assets/icon.ico
+and assets/icon.png, used by the Windows Startup shortcut and the Linux
+.desktop entries.
 """
 
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 
-ASSETS = Path(__file__).resolve().parent / "assets"
+from notion_dashboard.paths import ASSETS
+
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 
 

@@ -1,7 +1,19 @@
-.env
+﻿# Local environment
 .venv/
 __pycache__/
 *.py[cod]
 *.log
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# Never commit your token or personal config. The app keeps them in your
+# config folder (%APPDATA%\NotionDashboard or ~/.config/notion-dashboard).
+.env
+config.yaml
+
+# Editors
 .idea/
 .vscode/

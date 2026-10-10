@@ -1,6 +1,6 @@
 # PhD Notion Dashboard
 
-A small always-on-top Windows dashboard for your Notion PhD workspace. It shows:
+A small always-on-top desktop dashboard for your Notion PhD workspace, for **Windows** and **Linux**. It shows:
 
 - **Upcoming** meetings and events for the next 7 days;
 - your open **TODOs**, sorted by priority and due date;
@@ -8,7 +8,7 @@ A small always-on-top Windows dashboard for your Notion PhD workspace. It shows:
 
 From the dashboard you can also:
 
-- **dictate a TODO by voice** from anywhere with a hotkey (speech is recognised locally, nothing leaves your PC);
+- **dictate or type a TODO** from anywhere with a hotkey (speech is recognised locally, nothing leaves your PC);
 - mark a TODO as done by clicking it (with an **Undo** button);
 - add meetings and TODOs, including notes that become the TODO page's content;
 - view and edit a TODO's notes;
@@ -20,8 +20,8 @@ Closing the window hides it to the **system tray**, so it keeps running in the b
 
 ## 1. Requirements
 
-- Windows 10 or 11
-- Python 3.11 or newer ([python.org/downloads](https://www.python.org/downloads/))
+- Windows 10/11, or Linux with an X11 or Wayland desktop (GNOME, KDE, …)
+- Python 3.11 or newer
 - A Notion account where you can create an integration
 
 ## 2. Create a Notion integration
@@ -35,74 +35,93 @@ Closing the window hides it to the **system tray**, so it keeps running in the b
 
 ## 3. Install
 
-Open PowerShell in this folder and run:
+Both installers create a virtual environment in `.venv` inside this folder and install the app into it (`pip install -e .`, so changes to the source take effect on the next start). Add the voice option to also install [voice notes](#voice-notes).
+
+### Windows
+
+Install Python from [python.org](https://www.python.org/downloads/), then in PowerShell in this folder:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\install.ps1
+.\scripts\windows\install.ps1            # or: .\scripts\windows\install.ps1 -Voice
 ```
 
-This creates a virtual environment in `.venv`, installs the dependencies from `requirements.txt` and generates the app icon in `assets/`.
+### Linux
 
-To do it by hand instead:
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe app_icon.py
+```bash
+scripts/linux/install.sh                 # or: scripts/linux/install.sh --voice
 ```
 
-### Optional: voice notes
+This also adds **PhD Notion Dashboard** to your application menu. Right-clicking it there offers *New TODO* and *Clock in / out*.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-voice.txt
-.\.venv\Scripts\python.exe voice_check.py
+Qt and voice notes need a few system libraries that most desktops already have. The installer tells you if any are missing, for example on Debian/Ubuntu:
+
+```bash
+sudo apt install python3-venv libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1   # dashboard
+sudo apt install libportaudio2                                                                  # voice notes
 ```
 
-`voice_check.py` records 8 seconds from your default microphone and prints what the speech model understood. The first run downloads the speech model (about 150 MB for `base`); after that it works offline. An NVIDIA GPU is used automatically if available, but isn't needed.
+### By hand
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e ".[voice]"      # Windows: .venv\Scripts\pip install -e ".[voice]"
+```
+
+`pip install .` (or `pipx install .`) installs it like any other Python app, without the project folder.
+
+### Optional: check voice notes
+
+```bash
+.venv/bin/python -m notion_dashboard.voice.check         # Windows: .venv\Scripts\python -m notion_dashboard.voice.check
+```
+
+This records 8 seconds from your default microphone and prints what the speech model understood. The first run downloads the speech model (about 150 MB for `base`); after that it works offline. An NVIDIA GPU is used automatically if available, but isn't needed.
 
 ### Optional: tidy up voice notes with a local LLM
 
 Dictated notes can be cleaned up by a small language model running on your PC through [Ollama](https://ollama.com). Install Ollama, then download the model:
 
-```powershell
+```bash
 ollama pull qwen3:8b
 ```
 
-That's all. The dashboard talks to Ollama on `http://127.0.0.1:11434`. If Ollama isn't running, notes are saved untouched, as before.
+That's all. The dashboard talks to Ollama on `http://127.0.0.1:11434`. If Ollama isn't running, notes are saved untouched.
 
-## 4. Configure
+## 4. First start
 
-Just start the app (`.\.venv\Scripts\python.exe main.py`). On first start a setup window opens:
+Start the app:
 
-1. **Connect to Notion**: paste your integration token. It is checked against Notion and saved to `.env`.
+| | |
+| --- | --- |
+| Windows | `.\.venv\Scripts\notion-dashboard.exe` |
+| Linux | `.venv/bin/notion-dashboard`, or from the application menu |
+
+`python -m notion_dashboard` works too. On first start a setup window opens:
+
+1. **Connect to Notion**: paste your integration token. It is checked against Notion and saved in your [config folder](#where-your-settings-live).
 2. **Choose a workspace**, either
    - **Create a new PhD dashboard**: pick one of the pages shared with the integration. The app creates a *PhD Dashboard* page inside it with a ready-made **Calendar** and **TODOs** database (all the properties below, including the `Workday` tag and the `WorkHours` formula), or
-   - **Use existing databases**: pick your Calendar and TODO databases from the dropdowns. Property names are detected (the names from the table below are preferred).
+   - **Use existing databases**: pick your Calendar and TODO databases from the dropdowns. Property names are detected (the names from the table below are preferred). Check `config.yaml` afterwards.
 
 It then writes `config.yaml` and the dashboard opens. If a page or database is missing from the dropdowns, share it with the integration (**••• → Connections**) and click **Reload**.
 
-To run the setup window again later (new token, other databases), quit the dashboard from the tray and start it with:
+To run the setup window again later (new token, other databases), quit the dashboard from the tray and start it with `--setup`. Your app, hotkey and voice settings are kept.
 
-```powershell
-.\.venv\Scripts\python.exe main.py --setup
-```
+### Where your settings live
 
-Your app, hotkey and voice settings are kept.
+Your token (`.env`) and `config.yaml` are kept outside the project folder, so they survive reinstalls and never end up in git:
 
-### Command-line setup
+| | |
+| --- | --- |
+| Windows | `%APPDATA%\NotionDashboard` |
+| Linux | `~/.config/notion-dashboard` |
 
-`setup.py` is the older, terminal-based alternative. It asks for your integration token (saved to `.env`), lists every database the integration can see along with its properties, and asks which ones are your Calendar and TODO databases. It then writes `config.yaml`.
-
-`setup.py` guesses property names from their types. **Check `config.yaml` afterwards** against the property names it printed. In particular:
-
-- `date_property` is the first date property it finds, so make sure it is your *start* date.
-- `location_property` is the first text property it finds, which may not be your location.
-- The link, tags and workday settings are **not** written by `setup.py`. Add them by hand (see below).
-
-Property names are case-sensitive and must match Notion exactly.
+Set `NOTION_DASHBOARD_HOME` to use a different folder.
 
 ### What the databases need
+
+Only relevant if you use your own databases. Property names are case-sensitive and must match Notion exactly.
 
 **Calendar database**
 
@@ -182,24 +201,21 @@ voice:                # optional; these are the defaults
   keep_transcript: true   # also keep the raw dictation at the end of the page
 ```
 
-The `app` and `hotkeys` settings can also be changed in the app itself, from the gear icon in the title bar.
+The `app`, `hotkeys` and `voice` settings can also be changed in the app itself, from the gear icon in the title bar.
 
-## 5. Run
+## 5. Using it
 
-```powershell
-.\.venv\Scripts\python.exe main.py
-```
-
-To start without opening your Notion page in the browser:
-
-```powershell
-.\.venv\Scripts\python.exe main.py --no-open
-```
+| Option | |
+| --- | --- |
+| `--no-open` | Don't open your Notion page in the browser on start |
+| `--setup` | Show the setup window again |
+| `--action NAME` | Tell the running dashboard to `show`, `new_todo`, `toggle_dashboard` or `toggle_clock` (starts it first if needed) |
 
 - **Close (X) or Alt+F4** hides the dashboard to the system tray; it keeps running.
 - **Click the tray icon** to show or hide the dashboard.
 - **Right-click the tray icon** for *Show dashboard*, *Refresh* and *Quit*. *Quit* is the only way to exit completely.
 - With **Start minimized** on (Settings), the app starts straight in the tray.
+- Starting the app while it's already running brings the running one to the front.
 
 The dashboard refreshes every `refresh_minutes`. Use the refresh icon in the title bar to refresh immediately.
 
@@ -207,7 +223,7 @@ The dashboard refreshes every `refresh_minutes`. Use the refresh icon in the tit
 
 **Clock in** creates a workday page in the calendar database (tagged with `workday_tag`, start = now). **Clock out** sets its end time (`end_property`, or the end of the start date's range if you don't use a separate end property). Your hours formula then calculates the hours as usual.
 
-Each clock in / out is confirmed with a Windows notification, e.g. *Clocked in: Started at 09:12* or *Clocked out: Worked 7h 45m (09:12–16:57)*. If you had several sessions that day, the day's total is added. The notification appears even while the dashboard is open, because the hotkey works from any app. If you don't see it, check Windows Settings → System → Notifications (including Do not disturb / Focus).
+Each clock in / out is confirmed with a desktop notification, e.g. *Clocked in: Started at 09:12* or *Clocked out: Worked 7h 45m (09:12–16:57)*. If you had several sessions that day, the day's total is added. If you don't see it, check your notification settings (including Do not disturb / Focus).
 
 While you're clocked in, the bar shows how long you've been working, and the Today / This week / This month totals include the running time. The state lives in Notion (a workday with a start but no end), so it survives restarts, and a workday you start directly in Notion shows up as clocked in too.
 
@@ -215,26 +231,27 @@ The clock buttons only appear when `tags_property` and `workday_tag` are configu
 
 ### Voice notes
 
-1. Press `Ctrl+Alt+N` anywhere. A small overlay appears at the bottom of the screen with a red recording dot. It doesn't take focus, so the window you were in stays active.
+1. Press `Ctrl+Alt+N` anywhere. A small overlay appears at the bottom of the screen with a red recording dot and a text field.
 2. Speak. Your words appear live: white text is settled, grey text may still change.
 3. Pause for about 2 seconds, or press `Ctrl+Alt+N` again, to finish. **Esc** cancels.
+   **Rather type?** Just start typing instead of speaking. The recording stops, the overlay becomes a text field, and **Enter** (or `Ctrl+Alt+N`) saves it; **Esc** cancels. The overlay has keyboard focus while it's open and gives it back to the window you were in when you finish.
 4. The note is saved as a TODO (priority Low). With [cleanup](#tidying-up-notes) on, it gets a heading and a tidied-up body. Without it, a short note becomes the title; for a longer one the first sentence is the title and the full text goes into the page.
 
-The speech model runs in a separate background process that starts a few seconds after the dashboard, so the dashboard itself opens as fast as before. If you press the hotkey before the model has loaded, recording starts anyway and is transcribed as soon as it's ready.
+The speech model runs in a separate background process that starts a few seconds after the dashboard, so the dashboard itself opens quickly. If you press the hotkey before the model has loaded, recording starts anyway and is transcribed as soon as it's ready.
 
 The microphone is only open while you record. Speech recognition and the optional note cleanup run entirely on your PC.
 
-Settings → **Voice notes**: turn it on/off, language (auto-detect, English, German), model size (`tiny`, `base`, `small`) and CPU vs. GPU. Mixing languages within one sentence is handled less reliably than sticking to one.
+Settings → **Voice notes**: turn it on/off, language (auto-detect, English, German), model size (`tiny`, `base`, `small`) and CPU vs. GPU. Mixing languages within one sentence is handled less reliably than sticking to one. Without the voice packages, `Ctrl+Alt+N` opens the typed New TODO dialog instead.
 
 #### Tidying up notes
 
-When you think out loud, you repeat yourself, correct yourself and use a lot of filler words. With **Tidy up notes** on (Settings → Voice notes) and [Ollama](#optional-tidy-up-voice-notes-with-a-local-llm) installed, a local language model rewrites each note before it's saved:
+When you think out loud, you repeat yourself, correct yourself and use a lot of filler words. With **Tidy up notes** on (Settings → Voice notes) and [Ollama](#optional-tidy-up-voice-notes-with-a-local-llm) installed, a local language model rewrites each dictated note before it's saved:
 
 - the **title** becomes a short heading, e.g. "Email Anna about lab slot and calibration data";
 - the **page** gets the cleaned-up note. Repeated points are merged, and when you correct yourself ("Wednesday, no, Tuesday") only the correction is kept. Separate points become bullets;
 - below it, under *Original dictation:*, the raw transcript is kept in case the model got something wrong. Set `keep_transcript: false` to leave it out.
 
-The note stays in the language you spoke. While it's being tidied up the overlay shows "Tidying up…", which usually takes 1–2 seconds on a GPU. The model starts loading as soon as you begin recording. If Ollama isn't running, is too slow (over 60 s) or the model is missing, the note is saved untouched and the overlay tells you why.
+The note stays in the language you spoke. While it's being tidied up the overlay shows "Tidying up…", which usually takes 1–2 seconds on a GPU. If Ollama isn't running, is too slow (over 60 s) or the model is missing, the note is saved untouched and the overlay tells you why.
 
 Any Ollama chat model works, and you can change it under **Cleanup model**. `qwen3:8b` (about 5 GB) handled self-corrections most reliably in testing. `qwen3:4b` (2.5 GB) is faster and needs less memory, but sometimes keeps the wrong version when you correct yourself.
 
@@ -244,73 +261,105 @@ These work system-wide, even while the dashboard is hidden in the tray:
 
 | Hotkey | Action |
 | --- | --- |
-| `Ctrl+Alt+N` | **Dictate a TODO** by voice (see below); opens the typed New TODO dialog if voice notes are off or not installed |
+| `Ctrl+Alt+N` | **New TODO**: dictate or type it (see [Voice notes](#voice-notes)) |
 | `Ctrl+Alt+D` | Show / hide the dashboard |
-| `Ctrl+Alt+W` | Clock in / out (a Windows notification confirms it) |
+| `Ctrl+Alt+W` | Clock in / out (a notification confirms it) |
 
-Change them in **Settings → Hotkeys**: click a field and press the new combination, or clear it to turn that hotkey off. A hotkey needs Ctrl, Alt or Win plus a letter, digit or F-key.
+Change them in **Settings → Hotkeys**: click a field and press the new combination, or clear it to turn that hotkey off. A hotkey needs Ctrl, Alt or Win/Super plus a letter, digit or F-key.
 
 A hotkey is taken away from every other app while the dashboard runs. If another program already owns a combination, the dashboard shows "Hotkey not set" and you can pick a different one.
 
 The defaults were chosen because on German and most European keyboards `Ctrl+Alt` is the same as `AltGr`, and `AltGr+N` / `AltGr+D` / `AltGr+W` don't type a character, so they don't steal symbols like `@` (`AltGr+Q`) or `€` (`AltGr+E`).
 
-## 6. Start automatically with Windows
+#### Hotkeys on Linux
+
+- **X11 session**: hotkeys work like on Windows.
+- **Wayland session** (default on recent GNOME and KDE): Wayland doesn't let apps grab keys globally. Add the shortcuts in your desktop's keyboard settings instead (GNOME: *Settings → Keyboard → Custom Shortcuts*; KDE: *System Settings → Shortcuts → Add Command*), with commands like:
+
+  ```bash
+  /path/to/phd-notion-dashboard/.venv/bin/notion-dashboard --action new_todo
+  /path/to/phd-notion-dashboard/.venv/bin/notion-dashboard --action toggle_dashboard
+  /path/to/phd-notion-dashboard/.venv/bin/notion-dashboard --action toggle_clock
+  ```
+
+  Then clear the hotkeys in the app's Settings so they don't clash.
+
+On Wayland the dashboard runs through XWayland when it can, because only that way can it stay on top and place the voice overlay at the bottom of the screen. Set `QT_QPA_PLATFORM=wayland` to run it as a native Wayland app instead. On GNOME the tray icon needs the *AppIndicator and KStatusNotifierItem Support* extension; without a tray, closing the window quits the app.
+
+## 6. Start automatically
+
+**Windows**: adds a shortcut to your Startup folder, so the dashboard starts (without a console window) when you sign in.
 
 ```powershell
-.\install-startup.ps1
+.\scripts\windows\install-startup.ps1
+.\scripts\windows\uninstall-startup.ps1   # to remove it
 ```
 
-This adds a shortcut to your Windows Startup folder, so the dashboard launches (without a console window) every time you sign in.
+`scripts\windows\run-hidden.vbs` starts the dashboard without a console window as well, if you prefer to launch it by double-clicking.
 
-To remove it:
+**Linux**: adds an XDG autostart entry.
 
-```powershell
-.\uninstall-startup.ps1
+```bash
+scripts/linux/install-autostart.sh
+scripts/linux/uninstall-autostart.sh     # to remove it
 ```
-
-`run-hidden.vbs` starts the dashboard without a console window as well, if you prefer to launch it by double-clicking.
 
 ## 7. Troubleshooting
 
-**`object_not_found`**: the integration has no access to that page or database. Add it under **••• → Connections**, then run `setup.py` again.
+**`object_not_found`**: the integration has no access to that page or database. Add it under **••• → Connections**, then start with `--setup`.
 
 **Nothing happens when completing or adding items / "insufficient permissions"**: the integration is missing the *Update content* or *Insert content* capability (step 2).
 
-**A property shows up empty, or new meetings lose their location**: the property name in `config.yaml` doesn't exist in the database. Run `setup.py` to print the real names and fix `config.yaml`.
+**A property shows up empty, or new meetings lose their location**: the property name in `config.yaml` doesn't exist in the database. Fix it in `config.yaml` (see [What the databases need](#what-the-databases-need)).
 
 **No meetings appear**: meetings are shown for the next 7 days only. Also check that `date_property` points at the calendar's start date.
 
 **Completed TODOs still show**: add your exact "done" status names to `completed_statuses`.
 
-**Hotkeys don't do anything after an update**: an older copy of the dashboard may still be running and owns the hotkeys. Quit it from the tray icon (right-click → Quit) and start it again. Starting the dashboard while it's already running just brings the running one to the front.
+**Hotkeys don't do anything after an update**: an older copy of the dashboard may still be running and owns the hotkeys. Quit it from the tray icon (right-click → Quit) and start it again.
 
-**Voice notes: nothing is recognised / "Microphone unavailable"**: run `voice_check.py`. If the recording is silent, turn on Windows Settings → Privacy & security → Microphone → *Let desktop apps access your microphone*, and check that the right microphone is the Windows default input.
+**Linux: `Could not load the Qt platform plugin "xcb"`**: a system library is missing. Install the packages from [Linux](#linux), or start with `QT_QPA_PLATFORM=wayland`.
+
+**Voice notes: nothing is recognised / "Microphone unavailable"**: run the [voice check](#optional-check-voice-notes). On Windows, if the recording is silent, turn on Settings → Privacy & security → Microphone → *Let desktop apps access your microphone*. Check that the right microphone is the default input. On Linux, make sure `libportaudio2` is installed.
 
 **Workday hours look wrong**: check `hours_property`. If the formula returns 0, the hours are calculated from `date_property` and `end_property` instead.
 
-## Files
+## Project layout
 
-| File | Purpose |
-| --- | --- |
-| `main.py` | Entry point: loads config, connects to Notion, starts the app and tray icon |
-| `overlay.py` | The dashboard window |
-| `add_dialog.py` | New meeting / new TODO / notes dialogs, calendar and clock pickers |
-| `settings_dialog.py` | In-app settings |
-| `title_bar.py` | Custom dark title bar and frameless window/dialog base classes |
-| `tray.py` | System tray icon |
-| `hotkeys.py` | System-wide hotkeys (Win32 `RegisterHotKey`) |
-| `voice_notes.py` | Voice notes: starts the voice process, recording overlay, saves the TODO |
-| `voice_worker.py` | Background process: microphone + speech recognition (faster-whisper) |
-| `note_cleanup.py` | Tidies up dictated notes and gives them a heading with a local LLM (Ollama) |
-| `voice_check.py` | Microphone and speech-model check |
-| `app_icon.py` | Draws the app icon; run it to regenerate `assets/icon.ico` |
-| `notion_api.py` | All Notion API calls |
-| `setup_wizard.py` | First-start setup window (token, create or choose databases) |
-| `notion_setup.py` | Notion side of the setup: lists, creates and inspects databases |
-| `setup.py` | Command-line setup (alternative to the setup window) |
+```
+pyproject.toml              package metadata and dependencies (pip install -e ".[voice]")
+scripts/
+  windows/                  install.ps1, (un)install-startup.ps1, run-hidden.vbs
+  linux/                    install.sh, (un)install-autostart.sh, .desktop template
+src/notion_dashboard/
+  app.py                    entry point: config, first-start setup, wires everything together
+  paths.py                  config folder and bundled assets
+  notion/
+    api.py                  all Notion API calls used by the dashboard
+    setup.py                setup logic: list, create and inspect databases
+  ui/
+    dashboard.py            the dashboard window
+    dialogs.py              new meeting / new TODO / notes dialogs, calendar and clock pickers
+    settings_dialog.py      in-app settings
+    setup_wizard.py         first-start setup window
+    title_bar.py            dark title bar, frameless window/dialog base classes
+    tray.py                 system tray icon
+    icons.py                icon glyphs (Segoe MDL2 on Windows, bundled Material Icons elsewhere)
+    app_icon.py             draws the app icon; python -m notion_dashboard.ui.app_icon regenerates assets/
+  hotkeys/
+    __init__.py             shared hotkey logic, picks the platform backend
+    windows.py              Win32 RegisterHotKey
+    x11.py                  X11 XGrabKey
+  voice/
+    notes.py                voice notes: worker process, recording overlay, saving the TODO
+    worker.py               background process: microphone + speech recognition (faster-whisper)
+    cleanup.py              tidies up dictated notes with a local LLM (Ollama)
+    check.py                microphone and speech-model check
+  assets/                   app icon, check mark, Material Icons font (Apache 2.0)
+```
 
 ## Security
 
-Your Notion token is stored only in `.env`, which is listed in `.gitignore`. Never commit it.
+Your Notion token is stored only in your [config folder](#where-your-settings-live), never in the project folder. `.env` and `config.yaml` are also listed in `.gitignore`.
 
 The integration can read and change whatever pages and databases you connect it to. The dashboard itself only writes when you act: completing or undoing a TODO, adding a meeting or TODO, or saving notes.

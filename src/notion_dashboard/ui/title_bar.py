@@ -27,6 +27,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from notion_dashboard.ui import icons
+
 
 RESIZE_MARGIN = 6  # px, hover distance from an edge that triggers a resize
 
@@ -47,17 +49,12 @@ class TitleBar(QWidget):
 
     HEIGHT = 26
 
-    # Segoe MDL2 Assets glyphs - Windows' own icon font, chosen because its
-    # glyphs share consistent metrics/baseline at a given size, unlike
-    # regular Unicode symbols (↻ ⚙ □ ×) which render at wildly different
-    # sizes and baselines depending on the glyph, making the row look
-    # misaligned.
-    ICON_REFRESH = ""
-    ICON_SETTINGS = ""
-    ICON_MINIMIZE = ""
-    ICON_MAXIMIZE = ""
-    ICON_RESTORE = ""
-    ICON_CLOSE = ""
+    ICON_REFRESH = icons.ICON_REFRESH
+    ICON_SETTINGS = icons.ICON_SETTINGS
+    ICON_MINIMIZE = icons.ICON_MINIMIZE
+    ICON_MAXIMIZE = icons.ICON_MAXIMIZE
+    ICON_RESTORE = icons.ICON_RESTORE
+    ICON_CLOSE = icons.ICON_CLOSE
 
     refresh_clicked = pyqtSignal()
     settings_clicked = pyqtSignal()
@@ -106,7 +103,7 @@ class TitleBar(QWidget):
                 padding: 0;
                 margin: 0;
                 color: {colors["text"]};
-                font-family: "Segoe MDL2 Assets";
+                font-family: "{icons.ICON_FONT}";
                 font-size: 10pt;
             }}
 

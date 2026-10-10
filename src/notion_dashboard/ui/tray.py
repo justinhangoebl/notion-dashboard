@@ -6,8 +6,8 @@ from __future__ import annotations
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from app_icon import app_icon
-from overlay import Dashboard
+from notion_dashboard.ui.app_icon import app_icon
+from notion_dashboard.ui.dashboard import Dashboard
 
 
 class TrayIcon(QSystemTrayIcon):

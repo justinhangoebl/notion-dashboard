@@ -1,15 +1,10 @@
 $ErrorActionPreference = "Stop"
 
-$project = (Resolve-Path ".").Path
+$project = (Resolve-Path "$PSScriptRoot\..\..").Path
 $python = Join-Path $project ".venv\Scripts\pythonw.exe"
-$main = Join-Path $project "main.py"
 
 if (-not (Test-Path $python)) {
-    throw "Virtual environment not found. Run install.ps1 first."
-}
-
-if (-not (Test-Path $main)) {
-    throw "main.py not found."
+    throw "Virtual environment not found. Run scripts\windows\install.ps1 first."
 }
 
 $startup = [Environment]::GetFolderPath("Startup")
@@ -19,10 +14,10 @@ $wsh = New-Object -ComObject WScript.Shell
 $shortcut = $wsh.CreateShortcut($shortcutPath)
 
 $shortcut.TargetPath = $python
-$shortcut.Arguments = "`"$main`""
+$shortcut.Arguments = "-m notion_dashboard"
 $shortcut.WorkingDirectory = $project
 $shortcut.Description = "PhD Notion Dashboard"
-$icon = Join-Path $project "assets\icon.ico"
+$icon = Join-Path $project "src\notion_dashboard\assets\icon.ico"
 if (Test-Path $icon) {
     $shortcut.IconLocation = $icon
 }

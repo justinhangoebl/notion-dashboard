@@ -1,6 +1,6 @@
 """Voice notes: hotkey -> record -> live transcript overlay -> TODO.
 
-The speech model runs in a separate process (voice_worker.py) so it never
+The speech model runs in a separate process (voice/worker.py) so it never
 slows the dashboard down. This module starts and talks to that process,
 draws the recording overlay, and saves the result through the same
 add-TODO path as the typed dialog.
@@ -8,6 +8,7 @@ add-TODO path as the typed dialog.
 
 from __future__ import annotations
 
+import ctypes
 import html
 import importlib.util
 import json
@@ -20,13 +21,13 @@ from pathlib import Path
 from typing import Callable
 
 from PyQt6.QtCore import QObject, QPointF, QProcess, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPen
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QKeyEvent, QPainter, QPen
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
-from hotkeys import VK_ESCAPE, GlobalHotkeys
-from note_cleanup import CLEANUP_DEFAULTS, CleanupError, clean_note, warm_up
+from notion_dashboard.hotkeys import GlobalHotkeys
+from notion_dashboard.voice.cleanup import CLEANUP_DEFAULTS, CleanupError, clean_note, warm_up
 
-WORKER = Path(__file__).resolve().parent / "voice_worker.py"
+WORKER = Path(__file__).resolve().parent / "worker.py"
 
 VOICE_DEFAULTS = {
     "enabled": True,
@@ -271,24 +272,42 @@ class _Indicator(QWidget):
             painter.drawEllipse(center, 7, 7)
 
 
+class _NoteInput(QLineEdit):
+    """The overlay's text field; Esc is reported instead of ignored."""
+
+    escaped = pyqtSignal()
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Escape:
+            self.escaped.emit()
+            return
+        super().keyPressEvent(event)
+
+
 class VoiceOverlay(QWidget):
-    """Bottom-centre pill: indicator, live transcript, status line.
-    Always on top and never takes focus, so you keep typing where you were."""
+    """Bottom-centre pill: indicator, live transcript, a text field to type
+    the note instead, and a status line. Always on top. It takes keyboard
+    focus while you dictate or type, and hands it back to the window you
+    were in as soon as you're done."""
 
     WIDTH = 480
     TEXT_TAIL = 220
+    PLACEHOLDER = "…or just start typing"
+
+    typing_started = pyqtSignal()
+    submitted = pyqtSignal(str)
+    escaped = pyqtSignal()
 
     def __init__(self):
         super().__init__(
             None,
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.WindowDoesNotAcceptFocus,
+            | Qt.WindowType.WindowStaysOnTopHint,
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFixedWidth(self.WIDTH)
+        self._previous_window = 0
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 18, 12)
@@ -311,6 +330,20 @@ class VoiceOverlay(QWidget):
         self._text.setStyleSheet('color: #ffffff; font: 10pt "Segoe UI"; background: transparent;')
         body.addWidget(self._text)
 
+        self.input = _NoteInput()
+        self.input.setFixedWidth(text_width)
+        self.input.setPlaceholderText(self.PLACEHOLDER)
+        self.input.setStyleSheet(
+            'QLineEdit { color: #ffffff; font: 10pt "Segoe UI"; background: #0a0b0d;'
+            " border: 1px solid #3d3e44; border-radius: 6px; padding: 4px 8px; }"
+            " QLineEdit:focus { border: 1px solid #2383e2; }"
+        )
+        self.input.textEdited.connect(self._on_text_edited)
+        self.input.returnPressed.connect(lambda: self.submitted.emit(self.input.text()))
+        self.input.escaped.connect(self.escaped)
+        self.input.hide()
+        body.addWidget(self.input)
+
         self._status = QLabel()
         self._status.setWordWrap(True)
         self._status.setFixedWidth(text_width)
@@ -328,9 +361,22 @@ class VoiceOverlay(QWidget):
     def listening(self, hint: str, loading: bool):
         self._hide_timer.stop()
         self.indicator.mode = "rec"
+        self._text.show()
         self._set_text("", "Listening…")
+        self.input.clear()
+        self.input.show()
         self.hint(hint, loading)
         self._show()
+        self._take_focus()
+
+    def typing(self, hint: str):
+        """Recording was dropped for the keyboard: only the field remains."""
+        self.indicator.mode = "muted"
+        self._text.hide()
+        self._set_status(hint)
+
+    def text(self) -> str:
+        return self.input.text()
 
     def hint(self, text: str, loading: bool = False):
         self._set_status(("Loading voice model, keep talking  ·  " if loading else "") + text)
@@ -344,17 +390,20 @@ class VoiceOverlay(QWidget):
 
     def finishing(self, status: str = "Saving…"):
         self.indicator.mode = "busy"
+        self._end_input()
         self._set_status(status)
         self._reposition()
 
     def done(self, title: str, problem: str = ""):
         self.indicator.mode = "ok"
+        self._end_input()
         self._set_text(title, "")
         self._set_status(f"Added to TODOs without tidying up ({problem})" if problem else "Added to TODOs")
         self._hide_after(3500 if problem else 1800)
 
     def message(self, text: str, error: bool = False, hide_after: int = 1500):
         self.indicator.mode = "error" if error else "muted"
+        self._end_input()
         self._set_text("", "")
         self._text.setText(f'<span style="color:{"#ff7369" if error else "#ffffff"}">{html.escape(text)}</span>')
         self._set_status("")
@@ -362,6 +411,30 @@ class VoiceOverlay(QWidget):
         self._hide_after(hide_after)
 
     # ---- helpers ------------------------------------------------------
+
+    def _on_text_edited(self, text: str):
+        if text:
+            self.typing_started.emit()
+
+    def _end_input(self):
+        self.input.hide()
+        self._text.show()
+        self._give_back_focus()
+
+    def _take_focus(self):
+        """Focus the text field, remembering which window had focus. The
+        hotkey press lets this process take the foreground. (On Linux the
+        window manager hands focus back when the overlay hides.)"""
+        if sys.platform == "win32":
+            self._previous_window = ctypes.windll.user32.GetForegroundWindow()
+        self.activateWindow()
+        self.raise_()
+        self.input.setFocus()
+
+    def _give_back_focus(self):
+        previous, self._previous_window = self._previous_window, 0
+        if previous and self.isActiveWindow():
+            ctypes.windll.user32.SetForegroundWindow(previous)
 
     def _set_text(self, committed: str, pending: str):
         committed, pending = committed.strip(), pending.strip()
@@ -435,7 +508,7 @@ class VoiceNotes(QObject):
         self._fallback = fallback
         self._finish_hint = finish_hint
         self._on_saved = on_saved
-        self._state = "idle"  # idle | recording | finishing | saving
+        self._state = "idle"  # idle | recording | typing | finishing | saving
 
         self.available = bool(settings["enabled"]) and voice_installed()
         self.overlay = VoiceOverlay()
@@ -445,6 +518,9 @@ class VoiceNotes(QObject):
         self.worker.exited.connect(lambda: self._fail("The voice process restarted, please try again"))
         self.saved.connect(self._on_saved_ok)
         self.save_failed.connect(self._on_save_failed)
+        self.overlay.typing_started.connect(self._start_typing)
+        self.overlay.submitted.connect(self._submit_typed)
+        self.overlay.escaped.connect(self.cancel)
 
         if self.available:
             # Started after the dashboard is on screen, so launch stays fast.
@@ -459,13 +535,15 @@ class VoiceNotes(QObject):
 
         if self._state == "idle":
             self._state = "recording"
-            self._hotkeys.add_temporary(self.ESC_NAME, 0, VK_ESCAPE)
+            self._hotkeys.add_temporary(self.ESC_NAME, "Esc")
             self.overlay.listening(self._hint(), loading=not self.worker.ready)
             self.worker.send("start")
             if self._settings.get("cleanup"):
                 threading.Thread(target=warm_up, args=(self._settings,), daemon=True).start()
         elif self._state == "recording":
             self.worker.send("stop")
+        elif self._state == "typing":
+            self._submit_typed(self.overlay.text())
 
     def _hint(self) -> str:
         return f"{self._finish_hint()} or pause to finish  ·  Esc cancels"
@@ -473,6 +551,41 @@ class VoiceNotes(QObject):
     def cancel(self):
         if self._state == "recording":
             self.worker.send("cancel")
+        elif self._state == "typing":
+            self._end("Cancelled", hide_after=700)
+
+    # ---- typing instead of dictating -------------------------------------
+
+    def _start_typing(self):
+        """A key was typed into the overlay: drop the recording, keep the
+        field. The worker's "cancelled" reply is ignored in this state."""
+        if self._state != "recording":
+            return
+        self._state = "typing"
+        self.worker.send("cancel")
+        # The temporary Esc hotkey would swallow Esc before the field sees it.
+        self._hotkeys.remove(self.ESC_NAME)
+        self.overlay.typing(f"Enter or {self._finish_hint()} saves  ·  Esc cancels")
+
+    def _submit_typed(self, text: str):
+        if self._state != "typing":
+            return
+        if not text.strip():
+            self._end("Cancelled", hide_after=700)
+            return
+
+        self._state = "saving"
+        self.overlay.finishing()
+        title, content = split_note(text)
+
+        def worker():
+            try:
+                self._save({"title": title, "due": None, "priority": "Low", "content": content})
+                self.saved.emit(title, "")
+            except Exception as exc:
+                self.save_failed.emit(str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def apply_settings(self, settings: dict):
         """Called after Settings is saved: restart the worker if needed."""
